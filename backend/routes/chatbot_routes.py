@@ -40,7 +40,7 @@ AGRI_KNOWLEDGE_BASE = {
 
 def get_fallback_answer(message):
     msg = message.lower()
-    matches = []
+    matches: list[str] = []
     # Check for keywords
     for key, answer in AGRI_KNOWLEDGE_BASE.items():
         if key in msg:
