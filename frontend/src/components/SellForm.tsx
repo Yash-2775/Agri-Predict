@@ -1,28 +1,38 @@
-import { Picker } from '@react-native-picker/picker';
-import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { TEXTS } from '../constants';
-import { colors } from '../styles';
-import { Language, MarketplaceCategory, Product } from '../types';
+import { Picker } from "@react-native-picker/picker";
+import * as ImagePicker from "expo-image-picker";
+import React, { useState } from "react";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { TEXTS } from "../constants";
+import { colors } from "../styles";
+import { Language, MarketplaceCategory, Product } from "../types";
+import { db } from "../firebaseConfig"; // Make sure this path points to your config file
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 interface SellFormProps {
-  onAddProduct: (product: Omit<Product, 'id'>) => void;
+  onAddProduct: (product: Omit<Product, "id">) => void;
   language: Language;
 }
 
 const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
-  const [category, setCategory] = useState<MarketplaceCategory | ''>('');
-  const [name, setName] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [price, setPrice] = useState('');
-  const [imageUri, setImageUri] = useState<string>('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [sellOrRent, setSellOrRent] = useState<'sell' | 'rent'>('sell');
-  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState<MarketplaceCategory | "">("");
+  const [name, setName] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState("");
+  const [imageUri, setImageUri] = useState<string>("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [sellOrRent, setSellOrRent] = useState<"sell" | "rent">("sell");
+  const [description, setDescription] = useState("");
   // Seller contact fields
-  const [sellerName, setSellerName] = useState('');
-  const [sellerPhone, setSellerPhone] = useState('');
+  const [sellerName, setSellerName] = useState("");
+  const [sellerPhone, setSellerPhone] = useState("");
   const T = TEXTS[language];
 
   const handleImagePick = async () => {
@@ -37,55 +47,78 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // 1. Keep your existing validation
     if (!category || !name || !price) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert("Error", "Please fill in all required fields");
       return;
     }
     if (!sellerName || !sellerPhone) {
-      Alert.alert('Error', 'Please provide your name and phone number so buyers can contact you');
+      Alert.alert("Error", "Please provide contact details");
       return;
     }
     if (sellerPhone.length < 10) {
-      Alert.alert('Error', 'Please enter a valid phone number');
+      Alert.alert("Error", "Please enter a valid phone number");
       return;
     }
 
-    let unit = '';
-    if (category === MarketplaceCategory.Crops || category === MarketplaceCategory.Fertilizers) unit = 'kg';
-    if (category === MarketplaceCategory.Chemicals) unit = 'litre';
-    if (category === MarketplaceCategory.Machineries) unit = sellOrRent === 'rent' ? 'hour' : 'fixed';
+    // 2. Keep your unit calculation logic
+    let unit = "";
+    if (
+      category === MarketplaceCategory.Crops ||
+      category === MarketplaceCategory.Fertilizers
+    )
+      unit = "kg";
+    if (category === MarketplaceCategory.Chemicals) unit = "litre";
+    if (category === MarketplaceCategory.Machineries)
+      unit = sellOrRent === "rent" ? "hour" : "fixed";
 
-    const newProduct: Omit<Product, 'id'> = {
-      category,
-      name,
-      price: parseFloat(price),
-      image: imageUri || 'https://via.placeholder.com/400x300?text=Product+Image',
-      unit,
-      sellerName,
-      sellerPhone,
-      description,
-      ...(category !== MarketplaceCategory.Machineries ||
-        (category === MarketplaceCategory.Machineries && sellOrRent === 'sell')
-        ? { quantity: parseFloat(quantity) }
-        : {}),
-      ...(category === MarketplaceCategory.Chemicals ? { expiryDate } : {}),
-      ...(category === MarketplaceCategory.Machineries ? { sellOrRent } : {}),
-    };
+    try {
+      // 3. The "Magic" - Sending to Firebase
+      const docRef = await addDoc(collection(db, "products"), {
+        category,
+        name,
+        price: parseFloat(price),
+        description,
+        sellerName,
+        sellerPhone,
+        unit,
+        image:
+          imageUri || "https://via.placeholder.com/400x300?text=Product+Image",
+        createdAt: serverTimestamp(), // Very helpful for sorting the marketplace by newest
+        // Conditional fields
+        ...(category !== MarketplaceCategory.Machineries ||
+        (category === MarketplaceCategory.Machineries && sellOrRent === "sell")
+          ? { quantity: parseFloat(quantity) }
+          : {}),
+        ...(category === MarketplaceCategory.Chemicals ? { expiryDate } : {}),
+        ...(category === MarketplaceCategory.Machineries ? { sellOrRent } : {}),
+      });
 
-    onAddProduct(newProduct);
+      console.log("Document written with ID: ", docRef.id);
+      Alert.alert(
+        "Success",
+        "Your product has been posted to the Marketplace!",
+      );
 
-    // Reset form
-    setCategory('');
-    setName('');
-    setQuantity('');
-    setPrice('');
-    setImageUri('');
-    setExpiryDate('');
-    setSellOrRent('sell');
-    setDescription('');
-    setSellerName('');
-    setSellerPhone('');
+      // 4. Reset form (Keep your existing reset logic)
+      setCategory("");
+      setName("");
+      setQuantity("");
+      setPrice("");
+      setImageUri("");
+      setExpiryDate("");
+      setSellOrRent("sell");
+      setDescription("");
+      setSellerName("");
+      setSellerPhone("");
+    } catch (e) {
+      console.error("Error adding document: ", e);
+      Alert.alert(
+        "Upload Failed",
+        "Could not connect to the database. Please try again.",
+      );
+    }
   };
 
   const categories = Object.values(MarketplaceCategory);
@@ -97,7 +130,9 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
       {/* Seller Contact Info - Always visible */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>📞 Your Contact Details</Text>
-        <Text style={styles.sectionSubtitle}>Buyers will use this to reach you</Text>
+        <Text style={styles.sectionSubtitle}>
+          Buyers will use this to reach you
+        </Text>
       </View>
 
       <View style={styles.formGroup}>
@@ -134,7 +169,9 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
         <View style={styles.pickerContainer}>
           <Picker
             selectedValue={category}
-            onValueChange={(itemValue) => setCategory(itemValue as MarketplaceCategory)}
+            onValueChange={(itemValue) =>
+              setCategory(itemValue as MarketplaceCategory)
+            }
           >
             <Picker.Item label={T.selectCategory} value="" />
             {categories.map((cat) => (
@@ -160,7 +197,7 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
           <View style={styles.formGroup}>
             <Text style={styles.label}>Description</Text>
             <TextInput
-              style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+              style={[styles.input, { height: 80, textAlignVertical: "top" }]}
               value={description}
               onChangeText={setDescription}
               placeholder="Describe your product (quality, variety, etc.)"
@@ -176,7 +213,9 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
                 <View style={styles.pickerContainer}>
                   <Picker
                     selectedValue={sellOrRent}
-                    onValueChange={(itemValue) => setSellOrRent(itemValue as 'sell' | 'rent')}
+                    onValueChange={(itemValue) =>
+                      setSellOrRent(itemValue as "sell" | "rent")
+                    }
                   >
                     <Picker.Item label={T.sell} value="sell" />
                     <Picker.Item label={T.rent} value="rent" />
@@ -184,7 +223,7 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
                 </View>
               </View>
 
-              {sellOrRent === 'sell' && (
+              {sellOrRent === "sell" && (
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>{T.quantity}</Text>
                   <TextInput
@@ -200,7 +239,8 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>
-                  {T.price} * ({sellOrRent === 'rent' ? T.perHour : T.fixedPrice})
+                  {T.price} * (
+                  {sellOrRent === "rent" ? T.perHour : T.fixedPrice})
                 </Text>
                 <TextInput
                   style={styles.input}
@@ -216,7 +256,9 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
             <>
               <View style={styles.formGroup}>
                 <Text style={styles.label}>
-                  {T.quantity} * ({category === MarketplaceCategory.Chemicals ? 'litres' : 'kg'})
+                  {T.quantity} * (
+                  {category === MarketplaceCategory.Chemicals ? "litres" : "kg"}
+                  )
                 </Text>
                 <TextInput
                   style={styles.input}
@@ -230,7 +272,11 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>
-                  {T.price} * ({category === MarketplaceCategory.Chemicals ? T.perLitre : T.perKg})
+                  {T.price} * (
+                  {category === MarketplaceCategory.Chemicals
+                    ? T.perLitre
+                    : T.perKg}
+                  )
                 </Text>
                 <TextInput
                   style={styles.input}
@@ -259,9 +305,12 @@ const SellForm: React.FC<SellFormProps> = ({ onAddProduct, language }) => {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>{T.image}</Text>
-            <TouchableOpacity style={styles.imageButton} onPress={handleImagePick}>
+            <TouchableOpacity
+              style={styles.imageButton}
+              onPress={handleImagePick}
+            >
               <Text style={styles.imageButtonText}>
-                {imageUri ? '✓ Image Selected' : '📷 Select Image'}
+                {imageUri ? "✓ Image Selected" : "📷 Select Image"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -283,7 +332,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: colors.gray900,
     marginBottom: 20,
   },
@@ -293,7 +342,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: colors.gray800,
   },
   sectionSubtitle: {
@@ -306,7 +355,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.gray700,
     marginBottom: 8,
   },
@@ -324,29 +373,29 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.gray200,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   imageButton: {
     backgroundColor: colors.green100,
     padding: 15,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   imageButtonText: {
     color: colors.green700,
-    fontWeight: '600',
+    fontWeight: "600",
     fontSize: 14,
   },
   submitButton: {
     backgroundColor: colors.primary,
     padding: 18,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 10,
   },
   submitButtonText: {
     color: colors.white,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     fontSize: 16,
   },
 });
