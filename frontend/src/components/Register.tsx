@@ -1,10 +1,22 @@
-import { Picker } from '@react-native-picker/picker';
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { INDIAN_STATES, TEXTS } from '../constants';
-import { register } from '../services/apiService';
-import { colors, globalStyles } from '../styles';
-import { Language } from '../types';
+import { Picker } from "@react-native-picker/picker";
+import React, { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { INDIAN_STATES, TEXTS } from "../constants";
+import { colors, globalStyles } from "../styles";
+import { Language } from "../types";
+
+// --- FIREBASE IMPORTS ---
+import { auth, db } from "../firebaseConfig";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 
 interface RegisterProps {
   onRegister: () => void;
@@ -12,16 +24,21 @@ interface RegisterProps {
   language: Language;
 }
 
-const Register: React.FC<RegisterProps> = ({ onRegister, onNavigateToLogin, language }) => {
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [state, setState] = useState('');
-  const [city, setCity] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+const Register: React.FC<RegisterProps> = ({
+  onRegister,
+  onNavigateToLogin,
+  language,
+}) => {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState("");
+  const [city, setCity] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const T = TEXTS[language];
 
+  // Password Strength Logic
   const passwordStrength = useMemo(() => {
     let strength = 0;
     if (password.length > 5) strength++;
@@ -33,62 +50,90 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onNavigateToLogin, lang
   }, [password]);
 
   const getStrengthColor = () => {
-    switch (passwordStrength) {
-      case 0:
-      case 1:
-        return colors.danger;
-      case 2:
-      case 3:
-        return colors.warning;
-      case 4:
-      case 5:
-        return colors.primary;
-      default:
-        return colors.gray200;
-    }
+    if (passwordStrength <= 1) return colors.danger;
+    if (passwordStrength <= 3) return colors.warning;
+    return colors.primary;
   };
 
   const handleSubmit = async () => {
-    if (!username || !email || !state || !city || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+    // 1. Basic Validation
+    if (
+      !username ||
+      !email ||
+      !state ||
+      !city ||
+      !password ||
+      !confirmPassword
+    ) {
+      Alert.alert("Error", "Please fill in all fields");
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match!');
+      Alert.alert("Error", "Passwords do not match!");
       return;
     }
-    if (passwordStrength < 3) {
-      Alert.alert('Error', 'Password is not strong enough.');
+    if (passwordStrength < 2) {
+      Alert.alert("Error", "Password is too weak.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await register({
-        username,
-        email,
+      // 2. Create User in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
         password,
+      );
+      const user = userCredential.user;
+
+      // 3. Save Profile Data in Firestore
+      // IMPORTANT: Ensure you have "Created Database" in Firestore Console!
+      await setDoc(doc(db, "users", user.uid), {
+        username: username.trim(),
+        email: email.toLowerCase().trim(),
         state,
-        city,
+        city: city.trim(),
+        role: "farmer",
+        createdAt: new Date().toISOString(),
       });
 
-      if (response.success) {
-        Alert.alert('Success', 'Registration successful! Please login.', [
-          { text: 'OK', onPress: onRegister },
-        ]);
-      } else {
-        Alert.alert('Registration Failed', response.error || 'Please try again');
-      }
+      Alert.alert("Success", "Registration successful! Please login.", [
+        { text: "OK", onPress: onRegister },
+      ]);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Network error. Please try again.');
+      console.error("Registration Error Code:", error.code);
+
+      let msg = "An unexpected error occurred.";
+
+      // Professional Error Handling
+      switch (error.code) {
+        case "auth/email-already-in-use":
+          msg = "This email is already registered.";
+          break;
+        case "auth/invalid-email":
+          msg = "Please enter a valid email address.";
+          break;
+        case "auth/weak-password":
+          msg = "Password should be at least 6 characters.";
+          break;
+        case "auth/network-request-failed":
+          msg = "Network error. Please check your internet.";
+          break;
+        case "auth/operation-not-allowed":
+          msg = "Email/Password sign-in is not enabled in Firebase Console.";
+          break;
+      }
+
+      Alert.alert("Registration Failed", msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView 
+    <ScrollView
       style={globalStyles.authContainer}
       contentContainerStyle={{ padding: 16, paddingVertical: 40 }}
     >
@@ -116,14 +161,19 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onNavigateToLogin, lang
           editable={!loading}
         />
 
-        <View style={[globalStyles.input, { paddingVertical: 0 }]}>
+        <View
+          style={[
+            globalStyles.input,
+            { paddingVertical: 0, justifyContent: "center" },
+          ]}
+        >
           <Picker
             selectedValue={state}
             onValueChange={(itemValue) => setState(itemValue)}
             enabled={!loading}
           >
-            <Picker.Item label="Select State" value="" />
-            {INDIAN_STATES.map(s => (
+            <Picker.Item label="Select State" value="" color={colors.gray400} />
+            {INDIAN_STATES.map((s) => (
               <Picker.Item key={s} label={s} value={s} />
             ))}
           </Picker>
@@ -147,13 +197,20 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onNavigateToLogin, lang
         />
 
         {password.length > 0 && (
-          <View style={{ backgroundColor: colors.gray200, height: 8, borderRadius: 4, marginBottom: 15 }}>
+          <View
+            style={{
+              backgroundColor: colors.gray200,
+              height: 6,
+              borderRadius: 3,
+              marginBottom: 15,
+            }}
+          >
             <View
               style={{
-                height: 8,
-                borderRadius: 4,
+                height: 6,
+                borderRadius: 3,
                 backgroundColor: getStrengthColor(),
-                width: `${passwordStrength * 20}%`,
+                width: `${Math.min(passwordStrength * 20, 100)}%`,
               }}
             />
           </View>
@@ -168,8 +225,8 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onNavigateToLogin, lang
           editable={!loading}
         />
 
-        <TouchableOpacity 
-          style={[globalStyles.button, loading && { opacity: 0.6 }]} 
+        <TouchableOpacity
+          style={[globalStyles.button, loading && { opacity: 0.6 }]}
           onPress={handleSubmit}
           disabled={loading}
         >
@@ -182,7 +239,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onNavigateToLogin, lang
 
         <TouchableOpacity onPress={onNavigateToLogin} disabled={loading}>
           <Text style={globalStyles.linkText}>
-            {T.haveAccount}{' '}
+            {T.haveAccount}{" "}
             <Text style={globalStyles.linkTextBold}>{T.signIn}</Text>
           </Text>
         </TouchableOpacity>

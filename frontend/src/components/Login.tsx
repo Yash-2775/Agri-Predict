@@ -1,9 +1,22 @@
-import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { TEXTS } from '../constants';
-import { login } from '../services/apiService';
-import { globalStyles } from '../styles';
-import { Language, User } from '../types';
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  StyleSheet,
+} from "react-native";
+import { TEXTS } from "../constants";
+import { globalStyles, colors } from "../styles";
+import { Language, User } from "../types";
+
+// --- FIREBASE IMPORTS ---
+import { auth, db } from "../firebaseConfig";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -11,45 +24,81 @@ interface LoginProps {
   language: Language;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToRegister, language }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+const Login: React.FC<LoginProps> = ({
+  onLogin,
+  onNavigateToRegister,
+  language,
+}) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // Toggle state
   const [loading, setLoading] = useState(false);
   const T = TEXTS[language];
 
   const handleSubmit = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert("Error", "Please fill in all fields");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await login({ email, password });
+      // 1. Firebase Sign In (Using .trim() to prevent space errors)
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password,
+      );
+      const firebaseUser = userCredential.user;
 
-      if (response.success && response.data) {
-        // Convert API user data to app User type
-        const user: User = {
-          username: response.data.user.username,
-          email: response.data.user.email,
-          region: response.data.user.region,
-        };
-        onLogin(user);
+      // 2. Fetch Profile from Firestore
+      const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        onLogin({
+          username: data.username,
+          email: firebaseUser.email || "",
+          region: `${data.city}, ${data.state}`,
+        });
       } else {
-        Alert.alert('Login Failed', response.error || 'Invalid credentials');
+        onLogin({
+          username: "Farmer",
+          email: firebaseUser.email || "",
+          region: "Maharashtra",
+        });
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Network error. Please try again.');
+      console.error("Login Error:", error.code);
+      let msg = "Invalid email or password.";
+
+      if (
+        error.code === "auth/invalid-api-key" ||
+        error.code === "auth/api-key-not-valid"
+      ) {
+        msg =
+          "Firebase Configuration Error. Please restart the app with 'npx expo start -c'.";
+      } else if (error.code === "auth/user-not-found") {
+        msg = "No account found with this email.";
+      } else if (error.code === "auth/wrong-password") {
+        msg = "Incorrect password.";
+      }
+
+      Alert.alert("Login Failed", msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView 
-      style={globalStyles.authContainer} 
-      contentContainerStyle={{ justifyContent: 'center', flexGrow: 1, padding: 16 }}
+    <ScrollView
+      style={globalStyles.authContainer}
+      contentContainerStyle={{
+        justifyContent: "center",
+        flexGrow: 1,
+        padding: 16,
+      }}
     >
       <View style={globalStyles.authCard}>
         <View style={globalStyles.authIcon}>
@@ -57,6 +106,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToRegister, language }
         </View>
         <Text style={globalStyles.authTitle}>{T.loginTitle}</Text>
 
+        {/* Email Input */}
         <TextInput
           style={globalStyles.input}
           placeholder={T.email}
@@ -64,22 +114,33 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToRegister, language }
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
-          autoComplete="email"
           editable={!loading}
         />
 
-        <TextInput
-          style={globalStyles.input}
-          placeholder={T.password}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="password"
-          editable={!loading}
-        />
+        {/* Password Input with Toggle */}
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={[
+              globalStyles.input,
+              { flex: 1, marginBottom: 0, borderWidth: 0 },
+            ]}
+            placeholder={T.password}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword} // Controlled by state
+            editable={!loading}
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            style={styles.eyeButton}
+          >
+            <Text style={styles.eyeText}>{showPassword ? "🙈" : "👁️"}</Text>
+          </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity 
-          style={[globalStyles.button, loading && { opacity: 0.6 }]} 
+        {/* Login Button */}
+        <TouchableOpacity
+          style={[globalStyles.button, loading && { opacity: 0.6 }]}
           onPress={handleSubmit}
           disabled={loading}
         >
@@ -90,9 +151,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToRegister, language }
           )}
         </TouchableOpacity>
 
+        {/* Navigate to Register */}
         <TouchableOpacity onPress={onNavigateToRegister} disabled={loading}>
           <Text style={globalStyles.linkText}>
-            {T.noAccount}{' '}
+            {T.noAccount}{" "}
             <Text style={globalStyles.linkTextBold}>{T.signUp}</Text>
           </Text>
         </TouchableOpacity>
@@ -100,5 +162,24 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigateToRegister, language }
     </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    marginBottom: 15,
+    paddingRight: 10,
+  },
+  eyeButton: {
+    padding: 5,
+  },
+  eyeText: {
+    fontSize: 18,
+  },
+});
 
 export default Login;
