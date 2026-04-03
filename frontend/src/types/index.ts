@@ -1,7 +1,7 @@
 export enum Language {
-  EN = 'en',
-  HI = 'hi',
-  MR = 'mr',
+  EN = "English",
+  HI = "Hindi",
+  MR = "Marathi",
 }
 
 export interface User {
@@ -13,20 +13,20 @@ export interface User {
 export interface ChatMessage {
   id: string;
   text: string;
-  sender: 'user' | 'bot';
+  sender: "user" | "bot";
 }
 
 export interface NotificationState {
   id: string;
   message: string;
-  type: 'success' | 'error';
+  type: "success" | "error";
 }
 
 export enum MarketplaceCategory {
-  Crops = 'crops',
-  Fertilizers = 'fertilizers',
-  Machineries = 'machineries',
-  Chemicals = 'chemicals',
+  Crops = "crops",
+  Fertilizers = "fertilizers",
+  Machineries = "machineries",
+  Chemicals = "chemicals",
 }
 
 export interface Product {
@@ -38,10 +38,10 @@ export interface Product {
   unit: string;
   quantity?: number;
   expiryDate?: string;
-  sellOrRent?: 'sell' | 'rent';
-  sellerName?: string;    // ← ADD THIS
-  sellerPhone?: string;   // ← ADD THIS
-  description?: string;   // ← ADD THIS
+  sellOrRent?: "sell" | "rent";
+  sellerName?: string; // ← ADD THIS
+  sellerPhone?: string; // ← ADD THIS
+  description?: string; // ← ADD THIS
 }
 
 export interface DiseaseDetectionResult {
