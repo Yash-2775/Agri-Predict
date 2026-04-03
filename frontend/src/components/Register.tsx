@@ -9,9 +9,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { INDIAN_STATES, TEXTS } from "../constants";
+import { TEXTS } from "../constants";
 import { colors, globalStyles } from "../styles";
 import { Language } from "../types";
+import { INDIAN_STATES } from "../types";
 
 // --- FIREBASE IMPORTS ---
 import { auth, db } from "../firebaseConfig";

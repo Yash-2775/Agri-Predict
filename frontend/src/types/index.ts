@@ -10,6 +10,41 @@ export interface User {
   region: string;
 }
 
+export const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+  "Delhi",
+  "Jammu & Kashmir",
+  "Ladakh",
+  "Puducherry",
+];
+
 export interface ChatMessage {
   id: string;
   text: string;
@@ -57,5 +92,7 @@ export interface GovernmentScheme {
   description: { [key in Language]: string };
   eligibility: { [key in Language]: string };
   benefits: { [key in Language]: string };
+  documents: { [key in Language]: string };
+  howToApply: { [key in Language]: string };
   link: string;
 }

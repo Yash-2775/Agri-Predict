@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,34 +10,46 @@ import {
   View,
 } from "react-native";
 import { TEXTS } from "../constants";
+import { getFarmingAdvice } from "../services/geminiService";
 import { colors } from "../styles";
 import { ChatMessage, DiseaseDetectionResult, Language } from "../types";
-import { getFarmingAdvice } from "../services/geminiService"; // New Service
 
 interface ChatbotProps {
   language: Language;
   initialContext: DiseaseDetectionResult | null;
+  initialMessage?: string | null;
 }
 
-const Chatbot: React.FC<ChatbotProps> = ({ language, initialContext }) => {
+const Chatbot: React.FC<ChatbotProps> = ({
+  language,
+  initialContext,
+  initialMessage,
+}) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const initialMessageRef = useRef<string | null>(null);
   const T = TEXTS[language];
 
-  // Welcome message logic
+  // 1. Welcome message
   useEffect(() => {
     const welcomeMessages = {
       [Language.EN]: initialContext
-        ? `🌾 I've detected ${initialContext.diseaseName} (${(initialContext.confidence * 100).toFixed(1)}% confidence). How can I help with treatment?`
-        : "🌾 Namaste! I'm your AI farming assistant. Ask me about crops, pests, or fertilizers!",
+        ? `🌾 I can see your crop has ${initialContext.diseaseName} (${(initialContext.confidence * 100).toFixed(1)}% confidence). Ask me anything about treatment, prevention, or organic solutions!`
+        : initialMessage
+          ? `🌾 Namaste! I'm ready to help with your crop disease question. Sending it now...`
+          : "🌾 Namaste! I'm KisanBot, your AI farming assistant. Ask me about crops, pests, or fertilizers!",
       [Language.HI]: initialContext
-        ? `🌾 मैंने ${initialContext.diseaseName} का पता लगाया है। मैं उपचार में आपकी मदद कर सकता हूँ।`
-        : "🌾 नमस्ते! मैं आपका AI कृषि सहायक हूँ। मुझसे कुछ भी पूछें!",
+        ? `🌾 आपकी फसल में ${initialContext.diseaseName} पाया गया है (${(initialContext.confidence * 100).toFixed(1)}% सटीकता)। उपचार, रोकथाम या जैविक समाधान के बारे में पूछें!`
+        : initialMessage
+          ? `🌾 नमस्ते! आपका प्रश्न भेजा जा रहा है...`
+          : "🌾 नमस्ते! मैं आपका AI कृषि सहायक हूँ। मुझसे कुछ भी पूछें!",
       [Language.MR]: initialContext
-        ? `🌾 मी ${initialContext.diseaseName} शोधले आहे. मी तुम्हाला उपचारासाठी मदत करू शकतो.`
-        : "🌾 नमस्कार! मी तुमचा AI शेती सहाय्यक आहे. मला काहीही विचारा!",
+        ? `🌾 तुमच्या पिकात ${initialContext.diseaseName} आढळले आहे (${(initialContext.confidence * 100).toFixed(1)}% अचूकता). उपचार, प्रतिबंध किंवा सेंद्रिय उपायांबद्दल विचारा!`
+        : initialMessage
+          ? `🌾 नमस्कार! तुमचा प्रश्न पाठवला जात आहे...`
+          : "🌾 नमस्कार! मी तुमचा AI शेती सहाय्यक आहे. मला काहीही विचारा!",
     };
 
     setMessages([
@@ -48,15 +59,70 @@ const Chatbot: React.FC<ChatbotProps> = ({ language, initialContext }) => {
         text: welcomeMessages[language],
       },
     ]);
-  }, [initialContext, language]);
+  }, [initialContext, initialMessage, language]);
 
-  // Auto-scroll logic
+  // 2. Store initialMessage in ref + set input
+  useEffect(() => {
+    if (initialMessage) {
+      initialMessageRef.current = initialMessage;
+      setInput(initialMessage);
+    }
+  }, [initialMessage]);
+
+  // 3. Auto-send when input is set from initialMessage
+  useEffect(() => {
+    if (!input || input !== initialMessageRef.current) return;
+
+    const timer = setTimeout(async () => {
+      const question = initialMessageRef.current;
+      if (!question) return;
+      initialMessageRef.current = null; // prevent double send
+
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        text: question,
+        sender: "user",
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      setInput("");
+      setIsLoading(true);
+
+      try {
+        const botResponse = await getFarmingAdvice(question, language);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            text: botResponse,
+            sender: "bot",
+          },
+        ]);
+      } catch (error) {
+        console.error("Chatbot error:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            text: "I'm having trouble connecting. Please try again.",
+            sender: "bot",
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 1500); // 1.5s so user sees welcome message first
+
+    return () => clearTimeout(timer);
+  }, [input]);
+
+  // 4. Auto-scroll on new messages
   useEffect(() => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
 
+  // Manual send
   const handleSend = async () => {
     if (input.trim() === "" || isLoading) return;
 
@@ -71,9 +137,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ language, initialContext }) => {
     setIsLoading(true);
 
     try {
-      // Call the Gemini service directly
       const botResponse = await getFarmingAdvice(userQuestion, language);
-
       setMessages((prev) => [
         ...prev,
         {
@@ -111,7 +175,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ language, initialContext }) => {
           </View>
           <View>
             <Text style={styles.headerTitle}>{T.aiAssistant}</Text>
-            <Text style={styles.headerSubtitle}>Powered by Gemini AI</Text>
+            <Text style={styles.headerSubtitle}>Powered by Groq AI</Text>
           </View>
         </View>
       </View>
@@ -121,7 +185,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ language, initialContext }) => {
         style={styles.messagesContainer}
         contentContainerStyle={styles.messagesContent}
       >
-        {messages.map((msg, index) => (
+        {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
 
@@ -147,7 +211,11 @@ const Chatbot: React.FC<ChatbotProps> = ({ language, initialContext }) => {
           style={styles.input}
           value={input}
           onChangeText={setInput}
-          placeholder={T.chatPlaceholder}
+          placeholder={
+            initialMessage && !isLoading
+              ? "Tap ➤ to send your question..."
+              : T.chatPlaceholder
+          }
           placeholderTextColor={colors.gray400}
           editable={!isLoading}
           multiline
@@ -266,7 +334,10 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 16 },
   messageBubble: { maxWidth: "80%", padding: 12, borderRadius: 16 },
-  userBubble: { backgroundColor: colors.secondary, borderBottomRightRadius: 4 },
+  userBubble: {
+    backgroundColor: colors.secondary,
+    borderBottomRightRadius: 4,
+  },
   botBubble: {
     backgroundColor: colors.white,
     borderBottomLeftRadius: 4,

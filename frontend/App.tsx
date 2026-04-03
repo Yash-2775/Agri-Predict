@@ -22,13 +22,13 @@ import Notification from "./src/components/Notification";
 import Register from "./src/components/Register";
 
 // Hooks & Types
+import { TEXTS } from "./src/constants";
 import { useNotifications } from "./src/hooks/useNotifications";
 import { colors } from "./src/styles";
 import { DiseaseDetectionResult, Language, User } from "./src/types";
-import { TEXTS } from "./src/constants";
 
 type Screen =
-  | "dashboard"
+  | "Home"
   | "marketplace"
   | "cropDisease"
   | "govtSchemes"
@@ -47,27 +47,25 @@ const FARMING_TIPS = [
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authScreen, setAuthScreen] = useState<AuthScreen>("login");
-  const [activeScreen, setActiveScreen] = useState<Screen>("dashboard");
+  const [activeScreen, setActiveScreen] = useState<Screen>("Home");
   const [language, setLanguage] = useState<Language>(Language.EN);
   const [diseaseContext, setDiseaseContext] =
     useState<DiseaseDetectionResult | null>(null);
-  const { notifications, addNotification } = useNotifications();
+  const [chatInitialMessage, setChatInitialMessage] = useState<string | null>(
+    null,
+  );
+  const { notifications } = useNotifications();
 
   const T = TEXTS[language];
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
-    setActiveScreen("dashboard");
+    setActiveScreen("Home");
   };
 
   const handleLogout = () => {
     setUser(null);
     setAuthScreen("login");
-  };
-
-  const handleDiseaseDetected = (result: DiseaseDetectionResult) => {
-    setDiseaseContext(result);
-    setActiveScreen("aiAssistant");
   };
 
   // Auth screens
@@ -93,7 +91,7 @@ export default function App() {
   }
 
   const navItems: Array<{ key: Screen; label: string; icon: string }> = [
-    { key: "dashboard", label: T.dashboard, icon: "🏠" },
+    { key: "Home", label: T.home, icon: "🏠" },
     { key: "marketplace", label: T.marketplace, icon: "🛒" },
     { key: "cropDisease", label: T.cropDisease, icon: "🔬" },
     { key: "govtSchemes", label: T.govtSchemes, icon: "📋" },
@@ -102,14 +100,38 @@ export default function App() {
 
   const renderScreen = () => {
     switch (activeScreen) {
+      case "Home": // ← THIS WAS MISSING — caused blank dashboard
+        return (
+          <Dashboard
+            user={user}
+            language={language}
+            T={T}
+            onNavigate={setActiveScreen}
+          />
+        );
       case "marketplace":
         return <Marketplace language={language} />;
       case "cropDisease":
-        return <CropDiseaseDetection language={language} />;
+        return (
+          <CropDiseaseDetection
+            language={language}
+            onAskChatbot={(message) => {
+              setChatInitialMessage(message);
+              setDiseaseContext(null);
+              setActiveScreen("aiAssistant");
+            }}
+          />
+        );
       case "govtSchemes":
         return <GovernmentSchemes language={language} />;
       case "aiAssistant":
-        return <Chatbot language={language} initialContext={diseaseContext} />;
+        return (
+          <Chatbot
+            language={language}
+            initialContext={diseaseContext}
+            initialMessage={chatInitialMessage}
+          />
+        );
       default:
         return (
           <Dashboard
@@ -131,7 +153,6 @@ export default function App() {
           language={language}
           setLanguage={setLanguage}
         />
-
         <View style={styles.content}>{renderScreen()}</View>
 
         {/* Bottom Navigation */}
@@ -143,7 +164,14 @@ export default function App() {
                 styles.navItem,
                 activeScreen === item.key && styles.navItemActive,
               ]}
-              onPress={() => setActiveScreen(item.key)}
+              onPress={() => {
+                // Reset chatbot context when manually navigating to AI tab
+                if (item.key === "aiAssistant") {
+                  setChatInitialMessage(null);
+                  setDiseaseContext(null);
+                }
+                setActiveScreen(item.key);
+              }}
             >
               <Text style={styles.navIcon}>{item.icon}</Text>
               <Text
@@ -165,7 +193,7 @@ export default function App() {
   );
 }
 
-// Dashboard Component
+// ─── Dashboard Component ──────────────────────────────────────────────────────
 interface DashboardProps {
   user: User;
   language: Language;
@@ -190,25 +218,25 @@ const Dashboard: React.FC<DashboardProps> = ({
   }> = [
     {
       icon: "🔬",
-      label: T.detectDisease,
+      label: T.detectDisease || "Detect Disease",
       screen: "cropDisease",
       color: "#ef4444",
     },
     {
       icon: "📋",
-      label: T.viewSchemes,
+      label: T.viewSchemes || "View Schemes",
       screen: "govtSchemes",
       color: "#3b82f6",
     },
     {
       icon: "🛒",
-      label: T.sellProduct,
+      label: T.sellProduct || "Marketplace",
       screen: "marketplace",
       color: "#f59e0b",
     },
     {
       icon: "🤖",
-      label: T.chatWithAI,
+      label: T.chatWithAI || "Chat with AI",
       screen: "aiAssistant",
       color: "#8b5cf6",
     },
@@ -221,12 +249,14 @@ const Dashboard: React.FC<DashboardProps> = ({
     >
       {/* Welcome Banner */}
       <View style={dashStyles.welcomeBanner}>
-        <View>
-          <Text style={dashStyles.welcomeGreeting}>{T.goodMorning} 👋</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={dashStyles.welcomeGreeting}>
+            {T.goodMorning || "Good Morning"} 👋
+          </Text>
           <Text style={dashStyles.welcomeName}>{user.username}</Text>
-          {user.region && (
+          {user.region ? (
             <Text style={dashStyles.welcomeRegion}>📍 {user.region}</Text>
-          )}
+          ) : null}
         </View>
         <Text style={dashStyles.welcomeEmoji}>🌾</Text>
       </View>
@@ -235,13 +265,17 @@ const Dashboard: React.FC<DashboardProps> = ({
       <View style={dashStyles.tipCard}>
         <View style={dashStyles.tipHeader}>
           <Text style={dashStyles.tipIcon}>💡</Text>
-          <Text style={dashStyles.tipTitle}>{T.farmingTips}</Text>
+          <Text style={dashStyles.tipTitle}>
+            {T.farmingTips || "Tip of the Day"}
+          </Text>
         </View>
         <Text style={dashStyles.tipText}>{todaysTip}</Text>
       </View>
 
       {/* Quick Actions */}
-      <Text style={dashStyles.sectionTitle}>{T.quickActions}</Text>
+      <Text style={dashStyles.sectionTitle}>
+        {T.quickActions || "Quick Actions"}
+      </Text>
       <View style={dashStyles.actionsGrid}>
         {quickActions.map((action) => (
           <TouchableOpacity
@@ -280,10 +314,6 @@ const dashStyles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 6,
   },
   welcomeGreeting: {
@@ -306,10 +336,6 @@ const dashStyles = StyleSheet.create({
     marginBottom: 20,
     borderLeftWidth: 4,
     borderLeftColor: "#f59e0b",
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
     elevation: 3,
   },
   tipHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
@@ -335,10 +361,6 @@ const dashStyles = StyleSheet.create({
     padding: 18,
     alignItems: "center",
     borderTopWidth: 3,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
     elevation: 3,
   },
   actionIcon: { fontSize: 36, marginBottom: 10 },
@@ -348,11 +370,7 @@ const dashStyles = StyleSheet.create({
     color: colors.gray700,
     textAlign: "center",
   },
-  infoCard: {
-    backgroundColor: colors.green100,
-    borderRadius: 12,
-    padding: 16,
-  },
+  infoCard: { backgroundColor: colors.green100, borderRadius: 12, padding: 16 },
   infoTitle: {
     fontSize: 16,
     fontWeight: "bold",
@@ -372,10 +390,6 @@ const styles = StyleSheet.create({
     borderTopColor: colors.gray200,
     paddingVertical: 8,
     paddingHorizontal: 4,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 8,
   },
   navItem: {
@@ -384,19 +398,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  navItemActive: {
-    backgroundColor: colors.green100,
-  },
+  navItemActive: { backgroundColor: colors.green100 },
   navIcon: { fontSize: 20, marginBottom: 2 },
-  navLabel: {
-    fontSize: 10,
-    color: colors.gray500,
-    fontWeight: "500",
-  },
-  navLabelActive: {
-    color: colors.primary,
-    fontWeight: "700",
-  },
+  navLabel: { fontSize: 10, color: colors.gray500, fontWeight: "500" },
+  navLabelActive: { color: colors.primary, fontWeight: "700" },
 });
 
 registerRootComponent(App);
